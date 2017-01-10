@@ -16,7 +16,7 @@
 
 #define VERSION 	"1.0"
 #define DOT_PER_CM   160
-#define DOT_PER_TILE (DOT_PER_CM/4)
+#define DOT_PER_TILE (DOT_PER_CM/8)
 
 /***** TRIM ****/
 std::string trim(const std::string& str, const std::string& whitespace){
@@ -157,6 +157,44 @@ float compute_score(
     return sqrtf(score);    
 }
 
+
+//differenza tra luminosità
+float compute_score2(
+    int t_row, int t_col, 
+    const std::vector<uint8_t> &image,
+    const int dimx,
+    const int dimy,  
+    const std::vector<uint8_t> &pattern){
+
+	float lum_tile = 0;
+	float lum_pattern = 0 ;
+	
+    float score = 0;
+    for (int row = 0; row< DOT_PER_TILE; row++  ){
+        for( int col =0 ; col < DOT_PER_TILE; col++){
+            
+            int g_col = col +  t_col*DOT_PER_TILE;
+            int g_row = row +  t_row*DOT_PER_TILE;
+            
+            int image_idx = g_col+g_row*dimx;
+            int pattern_idx = col+row*DOT_PER_TILE;
+            const float img_point     = image[image_idx];
+            const float pattern_point = pattern[pattern_idx]; 
+            lum_tile		+=	img_point;
+            lum_pattern		+=	pattern_point;
+
+        }        
+    }
+    
+    lum_tile/= (DOT_PER_TILE*DOT_PER_TILE);
+    lum_pattern/= (DOT_PER_TILE*DOT_PER_TILE);
+
+    score = (lum_tile-lum_pattern) *(lum_tile-lum_pattern);                        
+
+    
+    return sqrtf(score);    
+}
+
 void paste_pattern_to_image(
     int t_row, int t_col, 
     std::vector<uint8_t> &new_image,
@@ -181,8 +219,9 @@ void paste_pattern_to_image(
 int main(int argc,  char **argv){	
 
     std::string filename = "test.pgm";
-    int num_pattern      = 16;
-    
+    int num_pattern      = 5;
+	int num_class        = 14;
+
 	
     std::cout << "GENERATORE DI MOSAICI" << std::endl;
     std::cout << "VERSIONE: " << VERSION << std::endl;
@@ -202,23 +241,24 @@ int main(int argc,  char **argv){
 	std::cout << "CARICAMENTO DEI PATTERN" << std::endl;
     std::vector<std::vector<uint8_t> > pattern_list;
 
-	for (int i = 0; i < num_pattern; i ++ ){
-	    std::vector<uint8_t> pattern;
-	    int pdimx = 0;
-	    int pdimy = 0;
-	    std::stringstream ss;
-	    ss << "pattern" << i << ".pgm";
-        load_gray_bmp(ss.str(), pattern, pdimx, pdimy);
-        
-        if(pdimx != DOT_PER_TILE  || pdimy != DOT_PER_TILE){
-            std::cout << "DIMENSIONE DEI PATTERN "  << ss.str() << " ERRATA"  <<  std::endl;
-            std::cout << "LA DIMENSIONE DEI PATTERN DEVE ESSERE: " << DOT_PER_TILE << "x" << DOT_PER_TILE << std::endl;
-            return -1;
-        }
-        
-        pattern_list.push_back(pattern);
+	for (int j = 0; j < num_class; j ++ ){
+		for (int i = 0; i < num_pattern; i ++ ){
+		    std::vector<uint8_t> pattern;
+		    int pdimx = 0;
+		    int pdimy = 0;
+		    std::stringstream ss;
+		    ss << "pattern_" << i <<"_class_"<<j << ".pgm";
+	        load_gray_bmp(ss.str(), pattern, pdimx, pdimy);
+	        
+	        if(pdimx != DOT_PER_TILE  || pdimy != DOT_PER_TILE){
+	            std::cout << "DIMENSIONE DEI PATTERN "  << ss.str() << " ERRATA"  <<  std::endl;
+	            std::cout << "LA DIMENSIONE DEI PATTERN DEVE ESSERE: " << DOT_PER_TILE << "x" << DOT_PER_TILE << std::endl;
+	            return -1;
+	        }
+	        
+	        pattern_list.push_back(pattern);
+		}
 	}
-	
 	
 	
     int xtiles =  dimx/DOT_PER_TILE;	
@@ -237,16 +277,17 @@ int main(int argc,  char **argv){
         for(int t_col = 0; t_col < xtiles; t_col++){
             //TROVA IL PATTERN CON LA DISTANZA MINIMA            
             uint16_t best_pattern_id =     0;
-            float    best_score      = 1000000000.0f;
+            float    best_score      = 10000000000.0f;
             
             for (uint16_t id = 0; id < pattern_list.size();  id++){
-                float score = compute_score(t_row, t_col, image, dimx, dimy,pattern_list[id]);
+                float score = compute_score2(t_row, t_col, image, dimx, dimy,pattern_list[id]);
+                //std::cout << "score:" << score << std::endl;
                 if(score < best_score){
                     best_score = score;
                     best_pattern_id = id;
                 }
             }
-            tiles_id[t_col+ t_row* ytiles] = best_pattern_id;
+            tiles_id[t_col+ t_row* xtiles] = best_pattern_id;
             std::cout << best_pattern_id << std::endl;
         }
     }
@@ -255,7 +296,7 @@ int main(int argc,  char **argv){
     std::vector<uint8_t> new_image(dimx*dimy);
     for(int t_row =0; t_row < ytiles; t_row++){
         for(int t_col = 0; t_col < xtiles; t_col++){
-            paste_pattern_to_image(t_row, t_col, new_image, dimx, dimy, pattern_list[tiles_id[t_col+ t_row* ytiles]]);
+            paste_pattern_to_image(t_row, t_col, new_image, dimx, dimy, pattern_list[tiles_id[t_col+ t_row* xtiles]]);
         }
     }
     
